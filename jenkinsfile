@@ -1,0 +1,59 @@
+def COLOR_MAP = [
+                'SUCCESS': 'good',
+                'FAILURE': 'danger',
+            ]
+
+pipeline {
+
+    agent {
+        label 'slave01'
+    }
+
+    stages {
+        stage('Code Checkout') {
+            steps {
+                checkout(
+                    scm: [
+                        $class: 'GitSCM',
+                        branches: [[name: '*/main']],
+                        userRemoteConfigs: [[
+                            credentialsId: 'jenkins-bitbucket-username-token',
+                            url: 'https://code.bespinglobal.com/scm/an/kube-prometheus-stack.git'
+                        ]]
+                    ]
+                )
+            }
+        }
+
+        stage('Authenticate to EKS Cluster') {
+            steps {
+                script {
+                    def awsCliImage = docker.image('odaniait/aws-kubectl')
+                    def clusterName = 'Alertnow-dev'
+                    def region = 'ap-northeast-2'
+                    def awsCredentialsId = 'aws_credentials'
+
+                    sh "mkdir -p $HOME/.kube"
+
+                    withCredentials([
+                        [
+                            $class: 'AmazonWebServicesCredentialsBinding',
+                            accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY',
+                            credentialsId: awsCredentialsId
+                        ]
+                    ]) {
+                        awsCliImage.inside("-v $HOME/.kube:/root/.kube --entrypoint ''") { c ->
+                            // Run EKS commands here
+                            
+                            sh "aws --version"
+                            sh "aws eks update-kubeconfig --region ${region} --name ${clusterName}"
+                            sh "kubectl config current-context"
+                            sh "kubectl cluster-info"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
